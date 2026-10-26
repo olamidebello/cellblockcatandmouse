@@ -97,3 +97,9 @@ ansible-playbook -i ansible/olamidepanel-server.ini ansible/bootstrap.yml
 ```
 
 Use `--ask-pass` if SSH password authentication is needed and available; keep passwords out of inventory files. For a temporary HTTP-only install before DNS is ready, pass `-e enable_tls=false`; enable HTTPS before signing in or using accounts publicly.
+
+### Domain displays Africa Media Hub or another site
+
+Deployment now inspects active Nginx configuration, backs up conflicting files, and removes only the exact game hostname from other `server_name` declarations before installing the game's dedicated virtual host. Other hostnames are preserved. A host-only conflicting declaration receives a unique `.invalid` name. The repair validates Nginx and restores edited contents if validation fails. It does not change wildcard declarations, delete other sites, or reload an invalid configuration. Backups are adjacent to the changed files with `.cellblock-backup-<timestamp>` suffixes. Deployment checks the game's page marker through the virtual host and, with TLS enabled, the public HTTPS URL. A public check failure may also indicate wrong DNS, an upstream proxy, or caching that must be corrected separately.
+
+Rerun the standalone bootstrap commands above to apply this fix. Verify the browser shows the Cellblock brand and a valid certificate; never bypass a certificate warning to sign in.

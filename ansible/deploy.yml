@@ -67,6 +67,15 @@
         enabled: true
         state: started
         daemon_reload: true
+    - name: Remove exact game hostname from conflicting active virtual hosts
+      ansible.builtin.command:
+        argv:
+          - python3
+          - /opt/cellblock/scripts/repair-domain-routing.py
+          - --domain
+          - '{{ game_domain }}'
+      register: routing_repair
+      changed_when: (routing_repair.stdout | from_json).changed
     - name: Install domain gateway
       ansible.builtin.copy:
         dest: /etc/nginx/sites-available/cellblock
@@ -116,6 +125,16 @@
       retries: 10
       delay: 2
       until: game_health.status == 200
+    - name: Verify HTTP hostname routes to the game when no certificate exists
+      ansible.builtin.uri:
+        url: http://127.0.0.1/
+        headers:
+          Host: '{{ game_domain }}'
+        return_content: true
+        status_code: 200
+      register: game_page
+      failed_when: "game_page.status != 200 or 'CELLBLOCK' not in game_page.content"
+      when: not game_certificate.stat.exists
     - name: Validate certificate email
       ansible.builtin.assert:
         that: letsencrypt_email | length > 3
@@ -129,6 +148,14 @@
         name: certbot.timer
         enabled: true
         state: started
+      when: enable_tls | bool
+    - name: Verify public HTTPS serves the game
+      ansible.builtin.uri:
+        url: 'https://{{ game_domain }}/'
+        return_content: true
+        status_code: 200
+      register: game_public_page
+      failed_when: "game_public_page.status != 200 or 'CELLBLOCK' not in game_public_page.content"
       when: enable_tls | bool
     - name: Report deployment target
       ansible.builtin.debug:
