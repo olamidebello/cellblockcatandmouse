@@ -55,3 +55,17 @@ sudo env LETSENCRYPT_EMAIL=YOUR_EMAIL bash scripts/deploy-olamidepanel.sh
 ```
 
 For deployment from a control machine, use `ansible/inventory.example.ini` with your actual Olamidepanel host and SSH user, then invoke `ansible/olamidepanel.yml` with that inventory. No credentials are stored in the repository. Verify with `systemctl status cellblock` and `curl -fsS https://cellblockcatandmouse.africandroid.com/health`.
+
+## Facility selection and dignity-first game policy
+
+Room creators choose one of three fictional facilities or enter a custom prison name, address, city, state/region, and country. Details are validated on the server and displayed to room members. Do not enter private residential addresses. Facility metadata does not select or claim to reproduce an actual institution's rules. The host API can change the facility between rounds.
+
+An inmate can switch between pocket and abstract underwear concealment. This is a fictional game state, not realistic concealment advice or a statement about real search effectiveness. Routine search actions are resolved by qualified NPC staff; concealed tokens require a fictional token scan followed by supervisor-approved private review. Signals expire after 20 seconds; scans recharge for eight seconds. A review takes four seconds, freezes the target, and happens entirely off-screen with qualified NPC staff and privacy. No anatomy, undressing, invasive examinations, sexual abuse, or searches to determine gender/sex are implemented. NPC staffing abstracts individual search assignments; the system does not collect players' gender, transgender status, or medical details.
+
+Search approval, denial, completion, and evidence receipts appear in a round audit, filtered to the actor and target. Voluntary surrender seizes tokens without detention. Policy concerns can be recorded even by detained players without score penalties; this is an in-game record, not a real PREA report or external complaint. Round audits expire on restart/new rounds; they are not a permanent evidence-management system.
+
+The main reference is [28 CFR 115.15](https://www.ecfr.gov/current/title-28/chapter-I/part-115/subpart-A/subject-group-ECFR4b237dabeebeb07/section-115.15), checked October 26, 2026. PREA imposes specific cross-gender search/viewing limits, documentation requirements, protections for transgender/intersex inmates, and staff training requirements. Our blanket private NPC review workflow is a deliberately stricter fictional abstraction, not all of PREA, a compliance certification, or legal/training advice. Other institutional policies vary. Unmodeled systems include real disciplinary hearings, visitation, medical care, actual reporting investigations, staffing demographics, and emergency exceptions.
+
+## Brand assets
+
+Original artwork generated with the built-in image generator is integrated as `public/assets/cover.webp` and `public/assets/logo.webp` (optimized web derivatives). Cover brief: fully clothed adult inmate and officer, amber/blue graphic-novel cellblock rivalry, cat-and-mouse maze emblem, no violence or intimate imagery. Logo brief: amber cat and blue mouse in a maze-and-bars shield, isolated on transparency, no agency insignia. The complete prompts are in `ART_PROMPTS.md`.
