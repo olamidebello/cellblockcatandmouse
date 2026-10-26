@@ -133,3 +133,14 @@ sudo python3 /opt/cellblock/scripts/legal-requests.py --resolve REQUEST_ID
 ```
 
 Review output contains personal information; keep it private. Resolution only updates the status and does not erase request data, delete accounts, or send a response. No automatic account/contact/log/backup deletion schedule is configured. Operators must manage retention, applicable rights, and responses. These pages are tailored initial notices, not a claim that all jurisdiction-specific requirements have been implemented. No mandatory arbitration or venue was added.
+
+## Pull and deploy latest updates
+
+Ansible entry point: `ansible/pull-and-deploy.yml`. It imports the standalone bootstrap playbook to clone/pull the latest code, deploy it, and verify all four legal pages. From a control machine:
+
+```sh
+export LETSENCRYPT_EMAIL=your-real-email@example.com
+ansible-playbook -i ansible/olamidepanel-server.ini ansible/pull-and-deploy.yml
+```
+
+On the server, `bash /opt/cellblock/scripts/pull-and-deploy.sh` invokes the existing self-contained hard-repair updater (certificate email optional), which archives existing source before pulling it. If the game is not installed, download and run `scripts/hard-fix-server.sh` using the instructions above.

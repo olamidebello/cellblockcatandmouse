@@ -1,0 +1,18 @@
+---
+# Run on the server or with ansible/olamidepanel-server.ini.
+- import_playbook: bootstrap.yml
+- name: Verify updated legal pages
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    game_domain: cellblockcatandmouse.africandroid.world
+  tasks:
+    - name: Verify owner notices on the deployed website
+      ansible.builtin.uri:
+        url: 'https://{{ game_domain }}/{{ item }}'
+        return_content: true
+        status_code: 200
+      loop: [terms, privacy, copyright, contact]
+      register: legal_page
+      failed_when: "legal_page.status != 200 or 'Olamide Olatayo Bello' not in legal_page.content"
