@@ -1,0 +1,5 @@
+---
+# Run directly on the Olamidepanel host; inherits the full deployment playbook.
+- import_playbook: deploy.yml
+  vars:
+    game_domain: cellblockcatandmouse.africandroid.com

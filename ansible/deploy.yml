@@ -1,0 +1,143 @@
+---
+- name: Deploy Cellblock Cat and Mouse
+  hosts: game
+  become: true
+  vars:
+    game_domain: cellblockcatandmouse.africandroid.com
+    game_repo: https://github.com/olamidebello/cellblockcatandmouse.git
+    game_ref: main
+    game_port: 18842
+    letsencrypt_email: "{{ lookup('ansible.builtin.env', 'LETSENCRYPT_EMAIL') }}"
+    enable_tls: false
+  tasks:
+    - name: Check settings before changing the server
+      ansible.builtin.assert:
+        that:
+          - game_domain is match('^[a-zA-Z0-9.-]+$')
+          - game_port | int > 1024
+          - game_port | int < 65536
+          - not (enable_tls | bool) or (letsencrypt_email | length > 3)
+    - name: Check existing domain certificate
+      ansible.builtin.stat:
+        path: '/etc/letsencrypt/live/{{ game_domain }}/fullchain.pem'
+      register: game_certificate
+    - name: Install runtime and gateway
+      ansible.builtin.apt:
+        name: [git, python3, nginx, certbot, python3-certbot-nginx]
+        update_cache: true
+    - name: Create service account
+      ansible.builtin.user:
+        name: cellblock
+        system: true
+        home: /var/lib/cellblock
+        create_home: true
+    - name: Pull application
+      ansible.builtin.git:
+        repo: '{{ game_repo }}'
+        dest: /opt/cellblock
+        version: '{{ game_ref }}'
+      notify: Restart game
+    - name: Install service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/cellblock.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Cellblock Cat and Mouse
+          After=network.target
+          [Service]
+          User=cellblock
+          WorkingDirectory=/opt/cellblock
+          Environment=GAME_DB=/var/lib/cellblock/game.db
+          Environment=PORT={{ game_port }}
+          ExecStart=/usr/bin/python3 /opt/cellblock/server.py
+          Restart=always
+          RestartSec=3
+          NoNewPrivileges=true
+          ProtectSystem=strict
+          ProtectHome=true
+          ReadWritePaths=/var/lib/cellblock
+          PrivateTmp=true
+          [Install]
+          WantedBy=multi-user.target
+      notify: Restart game
+    - name: Start game
+      ansible.builtin.systemd:
+        name: cellblock
+        enabled: true
+        state: started
+        daemon_reload: true
+    - name: Install domain gateway
+      ansible.builtin.copy:
+        dest: /etc/nginx/sites-available/cellblock
+        mode: '0644'
+        content: |
+          server {
+            listen 80;
+            server_name {{ game_domain }};
+          {% if game_certificate.stat.exists %}
+            return 301 https://$host$request_uri;
+          }
+          server {
+            listen 443 ssl;
+            server_name {{ game_domain }};
+            ssl_certificate /etc/letsencrypt/live/{{ game_domain }}/fullchain.pem;
+            ssl_certificate_key /etc/letsencrypt/live/{{ game_domain }}/privkey.pem;
+            ssl_protocols TLSv1.2 TLSv1.3;
+          {% endif %}
+            client_max_body_size 8k;
+            location / {
+              proxy_pass http://127.0.0.1:{{ game_port }};
+              proxy_set_header Host $host;
+              proxy_set_header X-Forwarded-Proto $scheme;
+              proxy_set_header X-Real-IP $remote_addr;
+            }
+          }
+    - name: Enable gateway
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/cellblock
+        dest: /etc/nginx/sites-enabled/cellblock
+        state: link
+    - name: Validate Nginx
+      ansible.builtin.command: nginx -t
+      changed_when: false
+    - name: Reload gateway
+      ansible.builtin.systemd:
+        name: nginx
+        state: reloaded
+        enabled: true
+    - name: Apply pending application restart
+      ansible.builtin.meta: flush_handlers
+    - name: Verify application
+      ansible.builtin.uri:
+        url: 'http://127.0.0.1:{{ game_port }}/health'
+        status_code: 200
+      register: game_health
+      retries: 10
+      delay: 2
+      until: game_health.status == 200
+    - name: Validate certificate email
+      ansible.builtin.assert:
+        that: letsencrypt_email | length > 3
+      when: enable_tls | bool
+    - name: Obtain domain certificate after DNS points to this server
+      ansible.builtin.command:
+        argv: [certbot, --nginx, -d, '{{ game_domain }}', --non-interactive, --agree-tos, --redirect, -m, '{{ letsencrypt_email }}']
+      when: enable_tls | bool
+    - name: Enable automatic certificate renewal
+      ansible.builtin.systemd:
+        name: certbot.timer
+        enabled: true
+        state: started
+      when: enable_tls | bool
+    - name: Report deployment target
+      ansible.builtin.debug:
+        msg: 'Game service running on 127.0.0.1:{{ game_port }}. Domain: {{ game_domain }}. DNS must point to this server.'
+  handlers:
+    - name: Restart game
+      ansible.builtin.systemd:
+        name: cellblock
+        state: restarted
+        daemon_reload: true
+
+    # Handlers run above; Certbot renewal is enabled explicitly below in tasks.
