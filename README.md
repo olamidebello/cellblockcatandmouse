@@ -173,3 +173,11 @@ bash /root/cellblock-mobile-deploy.sh
 ```
 
 The second stage requires the existing `africanappsstore.service` and its database on that machine; it uses the store's existing updater, backs up changed files/database, and verifies the public listing and APK download. If the store is on a different machine, run its `ansible/deploy-cellblock-mobile.yml` on that host separately. The game deployment and store publication are separate operations; neither is completed merely by pushing source. Store log: `/var/log/cellblock-store-publish.log`. Signing backup must remain private.
+
+### Game hostname switches to Kakakin after another deployment
+
+The repair now discovers existing address-specific listeners such as `154.16.170.86:443` and adds the game's exact hostname to the same listener group, alongside its wildcard listeners. This addresses Nginx address-selection precedence that can otherwise send a game hostname to another application's default server. Other applications and their certificates are preserved.
+
+HTTPS issuance now uses a dedicated ACME webroot, then installs the game's explicit TLS configuration. Checks validate certificate hostname and expiry before enabling it. `scripts/verify-domain.py` connects with the actual hostname as TLS SNI, validates the certificate through the system trust store, and requires the `/health` response to identify `app: cellblockcatandmouse`. Loopback, the configured server address, and public DNS are checked. A successful HTTP 200 or another app's generic health response is insufficient. A renewal hook reloads Nginx only after its configuration validates.
+
+Download a fresh copy of `scripts/hard-fix-server.sh` and run it to apply these updates. This repairs observed installation/routing/TLS problems; unrelated broken Nginx configuration, external DNS/provider issues, firewall restrictions, and certificate authority limits remain explicit failure conditions. An external panel or another deployment can still overwrite configuration later; these checks report the state at repair time.

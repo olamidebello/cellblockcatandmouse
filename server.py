@@ -165,7 +165,7 @@ class Handler(BaseHTTPRequestHandler):
     path=self.path.split('?')[0]
     if path=='/api/catalog':return self.send(200,catalog())
     if path=='/api/facilities':return self.send(200,FACILITIES)
-    if path=='/health':return self.send(200,{'ok':True})
+    if path=='/health':return self.send(200,{'ok':True,'app':'cellblockcatandmouse'})
     if path=='/api/leaderboard':
      with db() as c:rows=[dict(x) for x in c.execute('SELECT name,wins,points FROM users ORDER BY points DESC LIMIT 20')]
      return self.send(200,rows)
