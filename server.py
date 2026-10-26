@@ -14,7 +14,7 @@ def init():
  with db() as c:c.executescript('CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,name TEXT UNIQUE,password TEXT,salt TEXT,wins INTEGER DEFAULT 0,points INTEGER DEFAULT 0); CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user TEXT,expires REAL); CREATE TABLE IF NOT EXISTS legal_requests(id TEXT PRIMARY KEY,user TEXT,kind TEXT,email TEXT,message TEXT,created REAL,status TEXT DEFAULT "open");')
 def walk(x,y):return 0<=y<len(MAP) and 0<=x<len(MAP[0]) and MAP[y][x]!='#'
 def log(r,s):r['events']=(r['events']+[s])[-12:]
-def player(uid,name,role,bot=False):return dict(id=uid,name=name,role=role,x=1 if role=='inmate' else 19,y=3,bag=0,score=0,caught=False,ready=bot,bot=bot,last=0,cool=0,stamina=100,concealment="pockets",review=None,signals={},scan_cool=0,report_cool=0)
+def player(uid,name,role,bot=False):return dict(id=uid,name=name,role=role,x=1 if role=='inmate' else 19,y=3,bag=0,score=0,caught=False,ready=bot,bot=bot,last=0,cool=0,stamina=100,concealment="pockets",review=None,signals={},scan_cool=0,report_cool=0,stamina_at=time.time())
 def finish(r,winner):
  if r['phase']!='playing':return
  r['phase']='finished';r['winner']=winner;log(r,winner.title()+' team wins the round!')
@@ -42,6 +42,10 @@ def seize(r,p,q,method):
  log(r,p['name']+' secured tokens from '+q['name']+' after '+method+'.')
 def action(r,p,a):
  now=time.time()
+ sprint=isinstance(a,str) and a.startswith('sprint-')
+ if sprint:a=a.removeprefix('sprint-')
+ if sprint and a not in ['up','down','left','right']:raise ValueError('Invalid sprint direction')
+ elapsed=max(0,now-p.get('stamina_at',now));p['stamina']=min(100,p['stamina']+elapsed*12);p['stamina_at']=now
  if a=='report':
   if now>=p['report_cool']:
    p['report_cool']=now+10;record(r,p,None,'dignity_concern','recorded','No retaliation; no gameplay penalty');log(r,'A policy concern was recorded for this round. No player penalty.')
@@ -50,9 +54,12 @@ def action(r,p,a):
  if a not in ['up','down','left','right','interact','conceal','scan','private','surrender','report']:
   record(r,p,None,'blocked_action','denied','Unsupported or invasive action');raise ValueError('That action is not allowed by facility policy.')
  if a in ['up','down','left','right']:
-  if now-p['last']<.14:return
+  fast=sprint and p['stamina']>=18
+  if now-p['last']<(.085 if fast else .14):return
   dx,dy={'up':(0,-1),'down':(0,1),'left':(-1,0),'right':(1,0)}[a];x,y=p['x']+dx,p['y']+dy
-  if walk(x,y):p['x'],p['y']=x,y
+  if walk(x,y):
+   p['x'],p['y']=x,y
+   if fast:p['stamina']-=18
   p['last']=now
  elif a=='conceal' and p['role']=='inmate' and now>=p['cool']:
   p['concealment']='underwear' if p['concealment']=='pockets' else 'pockets';p['cool']=now+2
@@ -101,7 +108,7 @@ def action(r,p,a):
  check(r)
 def start(r):
  if not any(p['role']=='inmate' for p in r['players'].values()) or not any(p['role']=='officer' for p in r['players'].values()):raise ValueError('Both teams need at least one player. Add bots or invite a friend.')
- for p in r['players'].values():p.update(x=1 if p['role']=='inmate' else 19,y=3,bag=0,caught=False,score=0,last=0,cool=0,concealment="pockets",review=None,signals={},scan_cool=0,report_cool=0)
+ for p in r['players'].values():p.update(x=1 if p['role']=='inmate' else 19,y=3,bag=0,caught=False,score=0,last=0,cool=0,concealment="pockets",review=None,signals={},scan_cool=0,report_cool=0,stamina=100,stamina_at=time.time())
  r.update(phase='playing',ends=time.time()+180,spots=[dict(x=x,y=y,items=2) for x,y in SPOTS],delivered=0,seized=0,target=6,winner=None,events=[],audit=[],policy=POLICY);log(r,'Round started. Inmates: deliver 6 tokens to the yard. Officers: search and seize.')
 def step_toward(r,p,tx,ty):
  # Breadth-first pathfinding respects every wall.
@@ -173,6 +180,7 @@ class Handler(BaseHTTPRequestHandler):
     if path=='/assets/logo.webp':return self.send(200,(ROOT/'public/assets/logo.webp').read_bytes(),'image/webp')
     files={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript'),'/style.css':('style.css','text/css')}
     for slug in ['terms','privacy','copyright','contact']:files['/'+slug]=(slug+'.html','text/html; charset=utf-8')
+    files['/fps.js']=('fps.js','text/javascript')
     files['/legal.js']=('legal.js','text/javascript')
     if path in files:
      f,t=files[path];return self.send(200,(ROOT/'public'/f).read_bytes(),t)

@@ -26,3 +26,9 @@ class PolicyTests(unittest.TestCase):
  def test_facility_validation(self):
   self.assertEqual(facility({'id':'harbor'})['city'],'Harbor Point');self.assertEqual(facility(dict(name='Custom Prison',country='Nigeria'))['name'],'Custom Prison')
   with self.assertRaises(ValueError):facility(dict(name='x'*81,country='NG'))
+ def test_sprint_uses_stamina_and_respects_walls(self):
+  p=self.r['players']['i'];p.update(x=1,y=3,last=time.time()-.10,stamina=100,stamina_at=time.time());s.action(self.r,p,'sprint-right');self.assertEqual(p['x'],2);self.assertLess(p['stamina'],83)
+  s.action(self.r,p,'sprint-right');self.assertEqual(p['x'],2)
+  p.update(x=1,y=1,last=0);before=p['stamina'];s.action(self.r,p,'sprint-up');self.assertEqual(p['y'],1);self.assertGreaterEqual(p['stamina'],before)
+ def test_invalid_sprint_action_rejected(self):
+  with self.assertRaises(ValueError):s.action(self.r,self.r['players']['i'],'sprint-private')

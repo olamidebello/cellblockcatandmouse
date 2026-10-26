@@ -144,3 +144,11 @@ ansible-playbook -i ansible/olamidepanel-server.ini ansible/pull-and-deploy.yml
 ```
 
 On the server, `bash /opt/cellblock/scripts/pull-and-deploy.sh` invokes the existing self-contained hard-repair updater (certificate email optional), which archives existing source before pulling it. If the game is not installed, download and run `scripts/hard-fix-server.sh` using the instructions above.
+
+## Tactical first-person presentation
+
+The game now uses an original browser-native 2.5D raycasting view instead of the overhead board: shaded cellblock corridors, depth-tested character billboards, objective markers, hand-held scanner/route equipment, minimap, compass, match timer, stamina HUD, scanner pulses, and optional synthesized sound. It retains the original logo and cover art. No assets, maps, names, audio, or interface from Call of Duty are copied. This is a lightweight tactical presentation upgrade, not a modern AAA engine, photorealistic 3D shooter, gun-combat system, or exact replica.
+
+Controls: WASD moves relative to aim; mouse aims after clicking the viewport; Escape releases pointer lock; arrows turn; Shift sprints; E/Space interacts; R scans (officer) or changes concealment (inmate); F requests private review (officer) or surrenders tokens (inmate). Mobile players drag the viewport to aim and use direction, aim, sprint, and action buttons. Sound starts off and requires user activation; browser fullscreen/pointer-lock availability varies. High/Performance toggles ray resolution. Current collision/movement remains server-authoritative and tile-based, with client camera interpolation. Stamina regeneration is resolved on the player's next action. Sprint costs 18 stamina per successful fast step; exhausted players move at normal pace. No firearms, damage, or kill scoring were added; search and capture objectives remain intact.
+
+Verification: `node tests/fps-smoke.cjs` exercises rendering, finite geometry, relative movement, mouse input, and round/privacy overlays using a mock Canvas context; Python tests cover server-side sprint pacing, stamina, collision, and existing round/account/policy behavior. Browser/device visual performance has not been verified in this environment.
