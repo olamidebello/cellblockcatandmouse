@@ -8,7 +8,7 @@
     cellblock_checkout: /opt/cellblock-deploy
     cellblock_repository: https://github.com/olamidebello/cellblockcatandmouse.git
     cellblock_revision: main
-    game_domain: cellblockcatandmouse.africandroid.com
+    game_domain: cellblockcatandmouse.africandroid.world
     certificate_email: "{{ lookup('ansible.builtin.env', 'LETSENCRYPT_EMAIL') }}"
     enable_tls: true
   tasks:

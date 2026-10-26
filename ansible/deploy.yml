@@ -3,7 +3,7 @@
   hosts: game
   become: true
   vars:
-    game_domain: cellblockcatandmouse.africandroid.com
+    game_domain: cellblockcatandmouse.africandroid.world
     game_repo: https://github.com/olamidebello/cellblockcatandmouse.git
     game_ref: main
     game_port: 18842

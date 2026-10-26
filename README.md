@@ -14,7 +14,7 @@ Inmates deliver six fictional tokens to the yard within 180 seconds. Bags hold t
 
 ## Deploy to your server
 
-Target domain: **cellblockcatandmouse.africandroid.com** (as supplied, `.com`, not `.world`). Create its DNS A record pointing to your server and remove any conflicting AAAA record. Copy `ansible/inventory.example.ini` to an inventory and replace the host. Then run:
+Target domain: **cellblockcatandmouse.africandroid.world** (current domain). Create its DNS A record pointing to your server and remove any conflicting AAAA record. Copy `ansible/inventory.example.ini` to an inventory and replace the host. Then run:
 
 ```sh
 ansible-playbook -i ansible/inventory.ini ansible/deploy.yml -e enable_tls=true -e letsencrypt_email=YOUR_EMAIL
@@ -44,7 +44,7 @@ cd /opt/cellblock-deploy
 sudo env LETSENCRYPT_EMAIL=YOUR_EMAIL bash scripts/deploy-olamidepanel.sh
 ```
 
-Before running, point `cellblockcatandmouse.africandroid.com` to this server and allow inbound TCP 80/443. Replace `YOUR_EMAIL` with your actual email address. Existing conflicting Nginx entries for this exact hostname must be reconciled first. The playbook preserves HTTPS configuration on subsequent updates and enables certificate renewal.
+Before running, point `cellblockcatandmouse.africandroid.world` to this server and allow inbound TCP 80/443. Replace `YOUR_EMAIL` with your actual email address. Existing conflicting Nginx entries for this exact hostname must be reconciled first. The playbook preserves HTTPS configuration on subsequent updates and enables certificate renewal.
 
 For updates:
 
@@ -54,7 +54,7 @@ sudo git pull --ff-only
 sudo env LETSENCRYPT_EMAIL=YOUR_EMAIL bash scripts/deploy-olamidepanel.sh
 ```
 
-For deployment from a control machine, use `ansible/inventory.example.ini` with your actual Olamidepanel host and SSH user, then invoke `ansible/olamidepanel.yml` with that inventory. No credentials are stored in the repository. Verify with `systemctl status cellblock` and `curl -fsS https://cellblockcatandmouse.africandroid.com/health`.
+For deployment from a control machine, use `ansible/inventory.example.ini` with your actual Olamidepanel host and SSH user, then invoke `ansible/olamidepanel.yml` with that inventory. No credentials are stored in the repository. Verify with `systemctl status cellblock` and `curl -fsS https://cellblockcatandmouse.africandroid.world/health`.
 
 ## Facility selection and dignity-first game policy
 
@@ -87,7 +87,7 @@ ansible-playbook -i localhost, -c local "$BOOTSTRAP_PLAYBOOK"
 rm -f "$BOOTSTRAP_PLAYBOOK"
 ```
 
-Run the same block for updates. The bootstrap file is downloaded before execution; no existing repository or working directory is required. DNS must first resolve `cellblockcatandmouse.africandroid.com` to `154.16.170.86`, with ports 80/443 reachable. HTTPS issuance failure is reported as a deployment failure; fix DNS/reachability before rerunning.
+Run the same block for updates. The bootstrap file is downloaded before execution; no existing repository or working directory is required. DNS must first resolve `cellblockcatandmouse.africandroid.world` to `154.16.170.86`, with ports 80/443 reachable. HTTPS issuance failure is reported as a deployment failure; fix DNS/reachability before rerunning.
 
 Alternatively, from a control machine with this repository and Ansible installed:
 
