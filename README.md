@@ -69,3 +69,31 @@ The main reference is [28 CFR 115.15](https://www.ecfr.gov/current/title-28/chap
 ## Brand assets
 
 Original artwork generated with the built-in image generator is integrated as `public/assets/cover.webp` and `public/assets/logo.webp` (optimized web derivatives). Cover brief: fully clothed adult inmate and officer, amber/blue graphic-novel cellblock rivalry, cat-and-mouse maze emblem, no violence or intimate imagery. Logo brief: amber cat and blue mouse in a maze-and-bars shield, isolated on transparency, no agency insignia. The complete prompts are in `ART_PROMPTS.md`.
+
+## Standalone first-install and update playbook (154.16.170.86)
+
+`ansible/bootstrap.yml` solves the missing `/opt/cellblock-deploy` directory: it installs Git and Ansible, clones the checkout if absent, pulls updates if present, and runs the full service/Nginx/SSL deployment. Modified tracked files are not forcibly overwritten. Its remote inventory is `ansible/olamidepanel-server.ini`.
+
+On the Olamidepanel server, logged in as root:
+
+```sh
+apt-get update
+apt-get install -y ansible curl ca-certificates
+read -rp 'SSL certificate email: ' LETSENCRYPT_EMAIL
+export LETSENCRYPT_EMAIL
+BOOTSTRAP_PLAYBOOK=$(mktemp /tmp/cellblock-bootstrap-XXXXXX.yml)
+curl --fail --show-error --location https://raw.githubusercontent.com/olamidebello/cellblockcatandmouse/main/ansible/bootstrap.yml -o "$BOOTSTRAP_PLAYBOOK"
+ansible-playbook -i localhost, -c local "$BOOTSTRAP_PLAYBOOK"
+rm -f "$BOOTSTRAP_PLAYBOOK"
+```
+
+Run the same block for updates. The bootstrap file is downloaded before execution; no existing repository or working directory is required. DNS must first resolve `cellblockcatandmouse.africandroid.com` to `154.16.170.86`, with ports 80/443 reachable. HTTPS issuance failure is reported as a deployment failure; fix DNS/reachability before rerunning.
+
+Alternatively, from a control machine with this repository and Ansible installed:
+
+```sh
+export LETSENCRYPT_EMAIL=your-real-email@example.com
+ansible-playbook -i ansible/olamidepanel-server.ini ansible/bootstrap.yml
+```
+
+Use `--ask-pass` if SSH password authentication is needed and available; keep passwords out of inventory files. For a temporary HTTP-only install before DNS is ready, pass `-e enable_tls=false`; enable HTTPS before signing in or using accounts publicly.

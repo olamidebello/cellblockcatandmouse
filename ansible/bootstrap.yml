@@ -1,0 +1,53 @@
+---
+# Standalone entrypoint: works before /opt/cellblock-deploy exists.
+- name: Install or update Cellblock on Olamidepanel
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    cellblock_checkout: /opt/cellblock-deploy
+    cellblock_repository: https://github.com/olamidebello/cellblockcatandmouse.git
+    cellblock_revision: main
+    game_domain: cellblockcatandmouse.africandroid.com
+    certificate_email: "{{ lookup('ansible.builtin.env', 'LETSENCRYPT_EMAIL') }}"
+    enable_tls: true
+  tasks:
+    - name: Validate server and certificate contact
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.os_family == 'Debian'
+          - cellblock_checkout is match('^/opt/[a-zA-Z0-9_-]+$')
+          - game_domain is match('^[a-zA-Z0-9.-]+$')
+          - not (enable_tls | bool) or (certificate_email is match('^[^ @]+@[^ @]+[.][^ @]+$'))
+        fail_msg: 'Use Debian/Ubuntu and set LETSENCRYPT_EMAIL to a real certificate contact email.'
+    - name: Install deployment dependencies
+      ansible.builtin.apt:
+        name: [git, python3, ansible]
+        update_cache: true
+        cache_valid_time: 3600
+    - name: Clone on first install or pull the selected revision
+      ansible.builtin.git:
+        repo: '{{ cellblock_repository }}'
+        dest: '{{ cellblock_checkout }}'
+        version: '{{ cellblock_revision }}'
+        update: true
+        force: false
+    - name: Deploy application, gateway, and certificate from checkout
+      ansible.builtin.command:
+        argv:
+          - ansible-playbook
+          - -i
+          - ansible/olamidepanel-local.ini
+          - ansible/olamidepanel.yml
+          - -e
+          - '{{ {"enable_tls": enable_tls | bool, "game_domain": game_domain, "game_ref": cellblock_revision} | to_json }}'
+        chdir: '{{ cellblock_checkout }}'
+      environment:
+        LETSENCRYPT_EMAIL: '{{ certificate_email }}'
+        ANSIBLE_NOCOWS: '1'
+      register: cellblock_deployment
+      changed_when: "'changed=0' not in cellblock_deployment.stdout"
+    - name: Show deployment results
+      ansible.builtin.debug:
+        var: cellblock_deployment.stdout_lines
+      when: cellblock_deployment.stdout_lines is defined
