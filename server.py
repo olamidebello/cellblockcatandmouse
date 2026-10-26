@@ -11,7 +11,7 @@ SPOTS=[(2,1),(7,1),(13,1),(18,1),(3,5),(10,5),(17,5),(3,10),(10,10),(17,10)]
 def db():
  c=sqlite3.connect(DB); c.row_factory=sqlite3.Row; return c
 def init():
- with db() as c:c.executescript('CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,name TEXT UNIQUE,password TEXT,salt TEXT,wins INTEGER DEFAULT 0,points INTEGER DEFAULT 0); CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user TEXT,expires REAL);')
+ with db() as c:c.executescript('CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,name TEXT UNIQUE,password TEXT,salt TEXT,wins INTEGER DEFAULT 0,points INTEGER DEFAULT 0); CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user TEXT,expires REAL); CREATE TABLE IF NOT EXISTS legal_requests(id TEXT PRIMARY KEY,user TEXT,kind TEXT,email TEXT,message TEXT,created REAL,status TEXT DEFAULT "open");')
 def walk(x,y):return 0<=y<len(MAP) and 0<=x<len(MAP[0]) and MAP[y][x]!='#'
 def log(r,s):r['events']=(r['events']+[s])[-12:]
 def player(uid,name,role,bot=False):return dict(id=uid,name=name,role=role,x=1 if role=='inmate' else 19,y=3,bag=0,score=0,caught=False,ready=bot,bot=bot,last=0,cool=0,stamina=100,concealment="pockets",review=None,signals={},scan_cool=0,report_cool=0)
@@ -172,6 +172,8 @@ class Handler(BaseHTTPRequestHandler):
     if path=='/assets/cover.webp':return self.send(200,(ROOT/'public/assets/cover.webp').read_bytes(),'image/webp')
     if path=='/assets/logo.webp':return self.send(200,(ROOT/'public/assets/logo.webp').read_bytes(),'image/webp')
     files={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript'),'/style.css':('style.css','text/css')}
+    for slug in ['terms','privacy','copyright','contact']:files['/'+slug]=(slug+'.html','text/html; charset=utf-8')
+    files['/legal.js']=('legal.js','text/javascript')
     if path in files:
      f,t=files[path];return self.send(200,(ROOT/'public'/f).read_bytes(),t)
     self.send(404,{'error':'Not found'})
@@ -182,6 +184,17 @@ class Handler(BaseHTTPRequestHandler):
    if size>4096:raise ValueError('Request too large')
    data=json.loads(self.rfile.read(size));path=self.path
    with LOCK:
+    if path=='/api/legal-request':
+     key=('legal',self.client_address[0],int(time.time()/3600));rates[key]=rates.get(key,0)+1
+     if rates[key]>10:return self.send(429,{'error':'Request limit reached. Try again later.'})
+     kind=data.get('kind');email=data.get('email','');message=data.get('message','')
+     if kind not in ['general','privacy','copyright'] or not isinstance(email,str) or not isinstance(message,str) or len(email)>254 or not 10<=len(message.strip())<=1000:raise ValueError('Choose a request type and enter a message of 10–1000 characters.')
+     if email and ('@' not in email or any(c.isspace() for c in email)):raise ValueError('Enter a valid reply email or leave it empty.')
+     try:request_user=self.user()['id']
+     except PermissionError:request_user=None
+     request_id=secrets.token_hex(12)
+     with db() as c:c.execute('INSERT INTO legal_requests(id,user,kind,email,message,created) VALUES(?,?,?,?,?,?)',(request_id,request_user,kind,email.strip(),message.strip(),time.time()))
+     return self.send(201,{'id':request_id})
     if path in ['/api/register','/api/login']:
      key=(self.client_address[0],int(time.time()/60));rates[key]=rates.get(key,0)+1
      if rates[key]>30:return self.send(429,{'error':'Too many attempts. Try again in a minute.'})

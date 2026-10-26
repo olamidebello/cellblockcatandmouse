@@ -120,3 +120,16 @@ bash /root/cellblock-hard-fix.sh
 Optional certificate contact: set `export LETSENCRYPT_EMAIL=your-real-email@example.com` before running. With no email, Certbot registers without one, so certificate account notifications are unavailable. No placeholder email or interactive prompt is required.
 
 Logs: `/var/log/cellblock-hard-fix.log`. Recovery archives: `/var/backups/cellblock` (root-only). Failure output includes the failing task and the game journal. DNS must resolve exclusively to `154.16.170.86` for this default single-server repair; an unexpected A/AAAA record stops issuance with a diagnostic. This script does not edit registrar DNS, bypass certificate validation, repeatedly force renewals, remove unrelated virtual hosts, or promise to fix external firewalls/CA rate limits. Unrelated invalid Nginx configuration is reported for repair rather than deleted. A failure does not mean the site is fixed; retain the log and correct the reported blocker. Run with `-e game_expected_ipv4=NEW_IP` when intentionally moving servers.
+
+## Owner notices and legal requests
+
+Footer and signup links expose `/terms`, `/privacy`, `/copyright`, and `/contact`. The operator/owner notice names **Olamide Olatayo Bello**. Notices describe actual data handling, third-party licenses, and limits on claims involving AI-generated artwork. Effective date: October 26, 2026.
+
+The contact form stores a general/privacy/copyright request in the private SQLite `legal_requests` table, with optional reply email and optional current account association. It sends no email and does not automatically fulfill requests. The owner must review and respond through a verified channel, including requests from people without an account. On the server:
+
+```sh
+sudo python3 /opt/cellblock/scripts/legal-requests.py
+sudo python3 /opt/cellblock/scripts/legal-requests.py --resolve REQUEST_ID
+```
+
+Review output contains personal information; keep it private. Resolution only updates the status and does not erase request data, delete accounts, or send a response. No automatic account/contact/log/backup deletion schedule is configured. Operators must manage retention, applicable rights, and responses. These pages are tailored initial notices, not a claim that all jurisdiction-specific requirements have been implemented. No mandatory arbitration or venue was added.
