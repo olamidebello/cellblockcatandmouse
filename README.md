@@ -103,3 +103,20 @@ Use `--ask-pass` if SSH password authentication is needed and available; keep pa
 Deployment now inspects active Nginx configuration, backs up conflicting files, and removes only the exact game hostname from other `server_name` declarations before installing the game's dedicated virtual host. Other hostnames are preserved. A host-only conflicting declaration receives a unique `.invalid` name. The repair validates Nginx and restores edited contents if validation fails. It does not change wildcard declarations, delete other sites, or reload an invalid configuration. Backups are adjacent to the changed files with `.cellblock-backup-<timestamp>` suffixes. Deployment checks the game's page marker through the virtual host and, with TLS enabled, the public HTTPS URL. A public check failure may also indicate wrong DNS, an upstream proxy, or caching that must be corrected separately.
 
 Rerun the standalone bootstrap commands above to apply this fix. Verify the browser shows the Cellblock brand and a valid certificate; never bypass a certificate warning to sign in.
+
+## Automatic hard repair (missing service, wrong site, incorrect certificate)
+
+The standalone `ansible/hard-fix.yml` installs the application even when neither deployment directory exists. It backs up Nginx and existing source, preserves and backs up the external SQLite database, restores source from GitHub, repairs database permissions, reinstalls/enables systemd, removes exact-hostname routing conflicts, configures the dedicated game virtual host, requests the domain certificate, enables renewal, and checks backend and public HTTPS game content. Source modifications in `/opt/cellblock` are replaced after archival; the database remains in `/var/lib/cellblock`.
+
+Run as root from **any directory** on `154.16.170.86`:
+
+```sh
+apt-get update
+apt-get install -y curl ca-certificates
+curl -fL https://raw.githubusercontent.com/olamidebello/cellblockcatandmouse/main/scripts/hard-fix-server.sh -o /root/cellblock-hard-fix.sh
+bash /root/cellblock-hard-fix.sh
+```
+
+Optional certificate contact: set `export LETSENCRYPT_EMAIL=your-real-email@example.com` before running. With no email, Certbot registers without one, so certificate account notifications are unavailable. No placeholder email or interactive prompt is required.
+
+Logs: `/var/log/cellblock-hard-fix.log`. Recovery archives: `/var/backups/cellblock` (root-only). Failure output includes the failing task and the game journal. DNS must resolve exclusively to `154.16.170.86` for this default single-server repair; an unexpected A/AAAA record stops issuance with a diagnostic. This script does not edit registrar DNS, bypass certificate validation, repeatedly force renewals, remove unrelated virtual hosts, or promise to fix external firewalls/CA rate limits. Unrelated invalid Nginx configuration is reported for repair rather than deleted. A failure does not mean the site is fixed; retain the log and correct the reported blocker. Run with `-e game_expected_ipv4=NEW_IP` when intentionally moving servers.

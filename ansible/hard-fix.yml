@@ -1,0 +1,306 @@
+---
+# Standalone repair: no existing checkout is required.
+- name: Repair Cellblock installation, routing and HTTPS
+  hosts: all
+  become: true
+  vars:
+    game_domain: cellblockcatandmouse.africandroid.world
+    game_repo: https://github.com/olamidebello/cellblockcatandmouse.git
+    game_ref: main
+    game_port: 18842
+    letsencrypt_email: '{{ lookup(''ansible.builtin.env'', ''LETSENCRYPT_EMAIL'') }}'
+    enable_tls: true
+    game_expected_ipv4: 154.16.170.86
+  tasks:
+  - name: Run repair and report any blocker
+    block:
+    - name: Check settings before changing the server
+      ansible.builtin.assert:
+        that:
+        - ansible_facts.os_family == 'Debian'
+        - game_domain is match('^[a-zA-Z0-9.-]+$')
+        - game_port | int > 1024
+        - game_port | int < 65536
+    - name: Install repair dependencies
+      ansible.builtin.apt:
+        name:
+        - git
+        - python3
+        - nginx
+        - certbot
+        - python3-certbot-nginx
+        - ca-certificates
+        - curl
+        update_cache: true
+        cache_valid_time: 3600
+        lock_timeout: 360
+    - name: Create root-only recovery directory
+      ansible.builtin.file:
+        path: /var/backups/cellblock
+        state: directory
+        mode: '0700'
+    - name: Record recovery timestamp
+      ansible.builtin.set_fact:
+        repair_stamp: '{{ ansible_date_time.iso8601_basic_short }}'
+    - name: Back up current Nginx configuration
+      ansible.builtin.command:
+        argv:
+        - tar
+        - -czf
+        - /var/backups/cellblock/nginx-{{ repair_stamp }}.tgz
+        - -C
+        - /etc
+        - nginx
+    - name: Protect configuration archive
+      ansible.builtin.file:
+        path: /var/backups/cellblock/nginx-{{ repair_stamp }}.tgz
+        mode: '0600'
+    - name: Inspect existing application path
+      ansible.builtin.stat:
+        path: /opt/cellblock
+      register: old_game_path
+    - name: Inspect existing Git metadata
+      ansible.builtin.stat:
+        path: /opt/cellblock/.git
+      register: old_game_git
+    - name: Preserve existing application files before replacing code
+      ansible.builtin.command:
+        argv:
+        - tar
+        - -czf
+        - /var/backups/cellblock/source-{{ repair_stamp }}.tgz
+        - -C
+        - /opt
+        - cellblock
+      when: old_game_path.stat.exists
+    - name: Protect source archive
+      ansible.builtin.file:
+        path: /var/backups/cellblock/source-{{ repair_stamp }}.tgz
+        mode: '0600'
+      when: old_game_path.stat.exists
+    - name: Move incompatible non-Git application directory aside
+      ansible.builtin.command:
+        argv:
+        - mv
+        - /opt/cellblock
+        - /opt/cellblock-before-repair-{{ repair_stamp }}
+      when: old_game_path.stat.exists and not old_game_git.stat.exists
+    - name: Check existing domain certificate
+      ansible.builtin.stat:
+        path: /etc/letsencrypt/live/{{ game_domain }}/fullchain.pem
+      register: game_certificate
+    - name: Create service account
+      ansible.builtin.user:
+        name: cellblock
+        system: true
+        home: /var/lib/cellblock
+        create_home: true
+    - name: Pull application
+      ansible.builtin.git:
+        repo: '{{ game_repo }}'
+        dest: /opt/cellblock
+        version: '{{ game_ref }}'
+        force: true
+      notify: Restart game
+    - name: Repair persistent database directory ownership
+      ansible.builtin.file:
+        path: /var/lib/cellblock
+        state: directory
+        owner: cellblock
+        group: cellblock
+        mode: '0700'
+    - name: Back up and repair existing SQLite database permissions
+      ansible.builtin.command:
+        argv:
+        - python3
+        - -c
+        - import pathlib,sqlite3,pwd,os; p=pathlib.Path('/var/lib/cellblock/game.db'); uid=pwd.getpwnam('cellblock').pw_uid;
+          gid=pwd.getpwnam('cellblock').pw_gid; c=sqlite3.connect(p) if p.exists() else None; b=sqlite3.connect('/var/backups/cellblock/database-{{
+          repair_stamp }}.sqlite') if c else None; c.backup(b) if c else None; b.close() if b else None; c.close()
+          if c else None; [(os.chown(f,uid,gid),os.chmod(f,0o600)) for f in p.parent.glob('game.db*') if f.is_file()]
+      changed_when: false
+    - name: Validate application Python sources before starting
+      ansible.builtin.command:
+        argv:
+        - python3
+        - -m
+        - py_compile
+        - /opt/cellblock/server.py
+        - /opt/cellblock/policy.py
+      changed_when: false
+    - name: Install service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/cellblock.service
+        mode: '0644'
+        content: '[Unit]
+
+          Description=Cellblock Cat and Mouse
+
+          After=network.target
+
+          [Service]
+
+          User=cellblock
+
+          WorkingDirectory=/opt/cellblock
+
+          Environment=GAME_DB=/var/lib/cellblock/game.db
+
+          Environment=PORT={{ game_port }}
+
+          ExecStart=/usr/bin/python3 /opt/cellblock/server.py
+
+          Restart=always
+
+          RestartSec=3
+
+          NoNewPrivileges=true
+
+          ProtectSystem=strict
+
+          ProtectHome=true
+
+          ReadWritePaths=/var/lib/cellblock
+
+          PrivateTmp=true
+
+          [Install]
+
+          WantedBy=multi-user.target
+
+          '
+      notify: Restart game
+    - name: Start game
+      ansible.builtin.systemd:
+        name: cellblock
+        enabled: true
+        state: started
+        daemon_reload: true
+    - name: Remove exact game hostname from conflicting active virtual hosts
+      ansible.builtin.command:
+        argv:
+        - python3
+        - /opt/cellblock/scripts/repair-domain-routing.py
+        - --domain
+        - '{{ game_domain }}'
+      register: routing_repair
+      changed_when: (routing_repair.stdout | from_json).changed
+    - name: Install domain gateway
+      ansible.builtin.copy:
+        dest: /etc/nginx/sites-available/cellblock
+        mode: '0644'
+        content: "server {\n  listen 80;\n  server_name {{ game_domain }};\n{% if game_certificate.stat.exists %}\n\
+          \  return 301 https://$host$request_uri;\n}\nserver {\n  listen 443 ssl;\n  server_name {{ game_domain\
+          \ }};\n  ssl_certificate /etc/letsencrypt/live/{{ game_domain }}/fullchain.pem;\n  ssl_certificate_key\
+          \ /etc/letsencrypt/live/{{ game_domain }}/privkey.pem;\n  ssl_protocols TLSv1.2 TLSv1.3;\n{% endif %}\n\
+          \  client_max_body_size 8k;\n  location / {\n    proxy_pass http://127.0.0.1:{{ game_port }};\n    proxy_set_header\
+          \ Host $host;\n    proxy_set_header X-Forwarded-Proto $scheme;\n    proxy_set_header X-Real-IP $remote_addr;\n\
+          \  }\n}\n"
+        backup: true
+    - name: Enable gateway
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/cellblock
+        dest: /etc/nginx/sites-enabled/cellblock
+        state: link
+    - name: Validate Nginx
+      ansible.builtin.command: nginx -t
+      changed_when: false
+    - name: Reload gateway
+      ansible.builtin.systemd:
+        name: nginx
+        state: reloaded
+        enabled: true
+    - name: Apply pending application restart
+      ansible.builtin.meta: flush_handlers
+    - name: Verify application
+      ansible.builtin.uri:
+        url: http://127.0.0.1:{{ game_port }}/health
+        status_code: 200
+      register: game_health
+      retries: 10
+      delay: 2
+      until: game_health.status == 200
+      failed_when: game_health.status != 200 or not (game_health.json.ok | default(false))
+    - name: Verify HTTP hostname routes to the game when no certificate exists
+      ansible.builtin.uri:
+        url: http://127.0.0.1/
+        headers:
+          Host: '{{ game_domain }}'
+        return_content: true
+        status_code: 200
+      register: game_page
+      failed_when: game_page.status != 200 or 'CELLBLOCK' not in game_page.content
+      when: not game_certificate.stat.exists
+    - name: Check DNS points exclusively to the intended IPv4 server
+      ansible.builtin.command:
+        argv:
+        - python3
+        - -c
+        - 'import socket,sys; h,expected=sys.argv[1:]; addresses={x[4][0] for x in socket.getaddrinfo(h,443,type=socket.SOCK_STREAM)};
+          print(''DNS:'',addresses); assert addresses=={expected}, ''Correct the A/AAAA records before HTTPS issuance:
+          ''+str(addresses)'
+        - '{{ game_domain }}'
+        - '{{ game_expected_ipv4 }}'
+      changed_when: false
+      when: enable_tls | bool
+    - name: Obtain domain certificate after DNS points to this server
+      ansible.builtin.command:
+        argv: '{{ [''certbot'',''--nginx'',''--cert-name'',game_domain,''-d'',game_domain,''--non-interactive'',''--agree-tos'',''--redirect'',''--keep-until-expiring'']
+          + ([''-m'',letsencrypt_email] if letsencrypt_email | length > 3 else [''--register-unsafely-without-email''])
+          }}'
+      when: enable_tls | bool
+    - name: Enable automatic certificate renewal
+      ansible.builtin.systemd:
+        name: certbot.timer
+        enabled: true
+        state: started
+      when: enable_tls | bool
+    - name: Verify public HTTPS serves the game
+      ansible.builtin.uri:
+        url: https://{{ game_domain }}/
+        return_content: true
+        status_code: 200
+      register: game_public_page
+      failed_when: game_public_page.status != 200 or 'CELLBLOCK' not in game_public_page.content
+      when: enable_tls | bool
+    - name: Report deployment target
+      ansible.builtin.debug:
+        msg: 'Game service running on 127.0.0.1:{{ game_port }}. Domain: {{ game_domain }}. DNS must point to this
+          server.'
+    - name: Show successful repair details
+      ansible.builtin.debug:
+        msg:
+        - Game installed and responding at https://{{ game_domain }}
+        - 'Backups: /var/backups/cellblock'
+        - 'Service: systemctl status cellblock --no-pager'
+        - No email supplied means certificate account expiry/security emails are unavailable.
+    rescue:
+    - name: Collect service diagnostics
+      ansible.builtin.command:
+        argv:
+        - journalctl
+        - -u
+        - cellblock
+        - -n
+        - '40'
+        - --no-pager
+      register: repair_journal
+      failed_when: false
+      changed_when: false
+    - name: Print failing task and service output
+      ansible.builtin.debug:
+        msg:
+        - 'Failed task: {{ ansible_failed_task.name }}'
+        - '{{ ansible_failed_result }}'
+        - '{{ repair_journal.stdout_lines | default([]) }}'
+        - 'Recovery backups: /var/backups/cellblock'
+    - name: Report repair incomplete
+      ansible.builtin.fail:
+        msg: Repair did not complete. Fix the reported blocker and rerun; no success is claimed.
+  handlers:
+  - name: Restart game
+    ansible.builtin.systemd:
+      name: cellblock
+      state: restarted
+      daemon_reload: true
+  gather_facts: true
