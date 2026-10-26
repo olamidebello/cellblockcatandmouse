@@ -160,3 +160,16 @@ The Mission Loadout panel is available in rooms before and during rounds. Inmate
 Officers choose Any Contraband or a specific category. All categories remain searchable; a matching specific category earns 25 extra points per seized token. Private inventory choices and officer focus are redacted from other players' state. Choices persist across rounds in the same room, but are not saved as an account profile after leaving/restarts.
 
 The role-filtered resource selector lists every implemented resource: collect/deliver, concealment control, surrender, routine search, fictional scanner, private review request, mission map, sprint control, and policy concern recorder. Only resources appropriate for your role are offered. Save Choices records the selection; Use Selected Resource applies it and invokes its underlying action. Reports remain available while detained through the existing policy button. Search cooldowns, proximity, review authorization, movement, inventory, and role validation stay on the server. This is the list of currently implemented resources, not all possible equipment or real prison resources.
+
+## Mobile app and African Apps Store release
+
+A real signed Android 1.0.0 APK is included at `public/downloads/CellblockCatAndMouse.apk`, with SHA-256 and release metadata. The website's Install App button opens `/install`, with Android download and device-specific browser-install instructions. Android uses a dedicated HTTPS WebView client; iOS/iPadOS use Safari Add to Home Screen (no native IPA). The PWA service worker caches only the public shell, never API or APK requests. Online multiplayer and account operations always require a working game server. `/install` is not a claim of Play Store/Apple App Store publication.
+
+The companion `olamidebello/africanappsstore` repository includes the APK, verified listing, icon, and `ansible/deploy-cellblock-mobile.yml`. To deploy game and store on the same server from any directory:
+
+```sh
+curl -fL https://raw.githubusercontent.com/olamidebello/cellblockcatandmouse/main/scripts/deploy-mobile-and-store.sh -o /root/cellblock-mobile-deploy.sh
+bash /root/cellblock-mobile-deploy.sh
+```
+
+The second stage requires the existing `africanappsstore.service` and its database on that machine; it uses the store's existing updater, backs up changed files/database, and verifies the public listing and APK download. If the store is on a different machine, run its `ansible/deploy-cellblock-mobile.yml` on that host separately. The game deployment and store publication are separate operations; neither is completed merely by pushing source. Store log: `/var/log/cellblock-store-publish.log`. Signing backup must remain private.

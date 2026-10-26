@@ -152,7 +152,7 @@ def ticker():
 class Handler(BaseHTTPRequestHandler):
  def log_message(self,*args):pass
  def send(self,status,data,ctype='application/json'):
-  b=json.dumps(data).encode() if ctype=='application/json' else data
+  b=json.dumps(data).encode() if ctype=='application/json' and not isinstance(data,bytes) else data
   self.send_response(status);self.send_header('Content-Type',ctype);self.send_header('Content-Length',str(len(b)));self.send_header('X-Content-Type-Options','nosniff');self.send_header('Referrer-Policy','same-origin');self.send_header('Cache-Control','no-store');self.end_headers();self.wfile.write(b)
  def user(self):
   token=self.headers.get('Authorization','').removeprefix('Bearer ')
@@ -183,6 +183,10 @@ class Handler(BaseHTTPRequestHandler):
     if path=='/assets/cover.webp':return self.send(200,(ROOT/'public/assets/cover.webp').read_bytes(),'image/webp')
     if path=='/assets/logo.webp':return self.send(200,(ROOT/'public/assets/logo.webp').read_bytes(),'image/webp')
     files={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript'),'/style.css':('style.css','text/css')}
+    downloads={'/downloads/CellblockCatAndMouse.apk':('CellblockCatAndMouse.apk','application/vnd.android.package-archive'),'/downloads/CellblockCatAndMouse.apk.sha256':('CellblockCatAndMouse.apk.sha256','text/plain'),'/downloads/release.json':('release.json','application/json')}
+    if path in downloads:
+     name,mime=downloads[path];return self.send(200,(ROOT/'public/downloads'/name).read_bytes(),mime)
+    files.update({'/install':('install.html','text/html; charset=utf-8'),'/install.js':('install.js','text/javascript'),'/sw.js':('sw.js','text/javascript'),'/manifest.webmanifest':('manifest.webmanifest','application/manifest+json')})
     for slug in ['terms','privacy','copyright','contact']:files['/'+slug]=(slug+'.html','text/html; charset=utf-8')
     files['/fps.js']=('fps.js','text/javascript')
     files['/legal.js']=('legal.js','text/javascript')

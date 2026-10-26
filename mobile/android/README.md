@@ -1,0 +1,7 @@
+# Cellblock Android client
+
+Package `world.africandroid.cellblock`, version 1.0.0 (1), Android 8+ (API 26), target API 35. This signed client loads the HTTPS online game in a dedicated Android System WebView. It has Home/Reload/Browser controls and WebView fullscreen support. The game supplies touch movement/aiming. No offline multiplayer, background gameplay, native push, camera, microphone, location, or contacts access is implemented. Hardware gameplay testing has not been performed. Android and iOS app stores have not been submitted to; iOS uses the site's browser-install instructions.
+
+Only INTERNET permission is requested. In-app navigation is restricted to the exact game hostname over HTTPS; other HTTPS links open the external browser. TLS failures are blocked and shown as errors; no certificate bypass exists. JavaScript and DOM storage support game login; file/content access and third-party cookies are disabled. Update Android System WebView if game rendering is unavailable.
+
+Rebuild using `build.sh` with Android SDK platform/build-tools 35, Java 17, an Eclipse compiler jar, and the persistent signing key. Environment variables: `ANDROID_SDK_ROOT`, `ECJ_JAR`, `CELLBLOCK_KEYSTORE`, `CELLBLOCK_KEY_PASSWORD`. The private signing backup is kept separately; never commit signing keys or passwords. Increment manifest versionCode for future APK updates and use the same key. Changes to website gameplay do not require a new wrapper build.
