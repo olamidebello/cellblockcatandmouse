@@ -1,6 +1,7 @@
 import json, os, time, sqlite3, secrets, hashlib, threading, math, random
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
+from loadout import catalog, apply as apply_loadout, selected_resource, LOCATIONS
 from policy import POLICY, near, record, nearest, FACILITIES, facility
 ROOT=Path(__file__).parent
 DB=os.environ.get('GAME_DB',str(ROOT/'data/game.db'))
@@ -14,7 +15,7 @@ def init():
  with db() as c:c.executescript('CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,name TEXT UNIQUE,password TEXT,salt TEXT,wins INTEGER DEFAULT 0,points INTEGER DEFAULT 0); CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user TEXT,expires REAL); CREATE TABLE IF NOT EXISTS legal_requests(id TEXT PRIMARY KEY,user TEXT,kind TEXT,email TEXT,message TEXT,created REAL,status TEXT DEFAULT "open");')
 def walk(x,y):return 0<=y<len(MAP) and 0<=x<len(MAP[0]) and MAP[y][x]!='#'
 def log(r,s):r['events']=(r['events']+[s])[-12:]
-def player(uid,name,role,bot=False):return dict(id=uid,name=name,role=role,x=1 if role=='inmate' else 19,y=3,bag=0,score=0,caught=False,ready=bot,bot=bot,last=0,cool=0,stamina=100,concealment="pockets",review=None,signals={},scan_cool=0,report_cool=0,stamina_at=time.time())
+def player(uid,name,role,bot=False):return dict(id=uid,name=name,role=role,x=1 if role=='inmate' else 19,y=3,bag=0,score=0,caught=False,ready=bot,bot=bot,last=0,cool=0,stamina=100,concealment="pockets",review=None,signals={},scan_cool=0,report_cool=0,stamina_at=time.time(),item_type="phone",target_type="any",resource="collect" if role=="inmate" else "search")
 def finish(r,winner):
  if r['phase']!='playing':return
  r['phase']='finished';r['winner']=winner;log(r,winner.title()+' team wins the round!')
@@ -37,7 +38,9 @@ def check(r):
  elif time.time()>=r['ends']:finish(r,'officer')
  elif sum(x['items'] for x in r['spots'])+sum(x['bag'] for x in r['players'].values())+r['delivered']<r['target']:finish(r,'officer')
 def seize(r,p,q,method):
- amount=q['bag'];q['caught']=True;p['score']+=amount*75+50;r['seized']+=amount;q['bag']=0
+ amount=q['bag'];q['caught']=True;p['score']+=amount*75+50;
+ if p.get('target_type','any')==q.get('item_type','phone'):p['score']+=amount*25;log(r,'Officer focus objective matched: bonus points awarded.')
+ r['seized']+=amount;q['bag']=0
  record(r,p,q,'evidence','sealed',str(amount)+' fictional tokens; '+method)
  log(r,p['name']+' secured tokens from '+q['name']+' after '+method+'.')
 def action(r,p,a):
@@ -62,7 +65,7 @@ def action(r,p,a):
    if fast:p['stamina']-=18
   p['last']=now
  elif a=='conceal' and p['role']=='inmate' and now>=p['cool']:
-  p['concealment']='underwear' if p['concealment']=='pockets' else 'pockets';p['cool']=now+2
+  slots=[x['id'] for x in LOCATIONS];p['concealment']=slots[(slots.index(p['concealment'])+1)%len(slots)];p['cool']=now+2
  elif a=='surrender' and p['role']=='inmate' and p['bag']:
   r['seized']+=p['bag'];p['bag']=0;p['score']+=10;record(r,p,p,'voluntary_surrender','completed');log(r,p['name']+' voluntarily surrendered tokens; no detention.')
  elif a in ['scan','private'] and p['role']=='officer':
@@ -95,7 +98,7 @@ def action(r,p,a):
    q=nearest(r,p)
    if q:
     record(r,p,q,'routine_search','completed','Qualified NPC staff; respectful fully clothed abstraction')
-    if q['bag'] and q['concealment']=='pockets':
+    if q['bag'] and q['concealment'] in ['pockets','carry_bag']:
      seize(r,p,q,'routine search');found=True
     else:log(r,q['name']+' completed a routine search; no accessible tokens found.');p['score']=max(0,p['score']-10)
    for s in r['spots']:
@@ -108,7 +111,7 @@ def action(r,p,a):
  check(r)
 def start(r):
  if not any(p['role']=='inmate' for p in r['players'].values()) or not any(p['role']=='officer' for p in r['players'].values()):raise ValueError('Both teams need at least one player. Add bots or invite a friend.')
- for p in r['players'].values():p.update(x=1 if p['role']=='inmate' else 19,y=3,bag=0,caught=False,score=0,last=0,cool=0,concealment="pockets",review=None,signals={},scan_cool=0,report_cool=0,stamina=100,stamina_at=time.time())
+ for p in r['players'].values():p.update(x=1 if p['role']=='inmate' else 19,y=3,bag=0,caught=False,score=0,last=0,cool=0,review=None,signals={},scan_cool=0,report_cool=0,stamina=100,stamina_at=time.time())
  r.update(phase='playing',ends=time.time()+180,spots=[dict(x=x,y=y,items=2) for x,y in SPOTS],delivered=0,seized=0,target=6,winner=None,events=[],audit=[],policy=POLICY);log(r,'Round started. Inmates: deliver 6 tokens to the yard. Officers: search and seize.')
 def step_toward(r,p,tx,ty):
  # Breadth-first pathfinding respects every wall.
@@ -160,6 +163,7 @@ class Handler(BaseHTTPRequestHandler):
   try:
    with LOCK:
     path=self.path.split('?')[0]
+    if path=='/api/catalog':return self.send(200,catalog())
     if path=='/api/facilities':return self.send(200,FACILITIES)
     if path=='/health':return self.send(200,{'ok':True})
     if path=='/api/leaderboard':
@@ -171,7 +175,7 @@ class Handler(BaseHTTPRequestHandler):
      state=json.loads(json.dumps(r));me=r['players'][u['id']]
      for q in state['players'].values():
       if q['id']!=u['id']:
-       for private_key in ['bag','concealment','signals']:q.pop(private_key,None)
+       for private_key in ['bag','concealment','signals','item_type','target_type','resource','resource_feedback']:q.pop(private_key,None)
      state['audit']=[e for e in state.get('audit',[]) if e['actor']==u['id'] or e['target']==u['id']][-30:]
      for s in state.get('spots',[]):
       if me['role']=='officer':s.pop('items',None)
@@ -249,7 +253,7 @@ class Handler(BaseHTTPRequestHandler):
     elif path=='/api/role':
      if r['phase']=='playing':raise ValueError('Wait until the round finishes.')
      if data.get('role') not in ['inmate','officer']:raise ValueError('Invalid role')
-     r['players'][uid]['role']=data['role']
+     r['players'][uid]['role']=data['role'];r['players'][uid]['resource']='collect' if data['role']=='inmate' else 'search'
     elif path=='/api/bots':
      if r['host']!=uid or r['phase']=='playing':raise ValueError('Only the host can add bots between rounds.')
      for role in ['inmate','officer']:
@@ -258,6 +262,14 @@ class Handler(BaseHTTPRequestHandler):
     elif path=='/api/start':
      if r['host']!=uid or r['phase']=='playing':raise ValueError('Only the host can start a new round.')
      start(r)
+    elif path=='/api/loadout':
+     apply_loadout(r['players'][uid],data,r['phase'])
+    elif path=='/api/use-resource':
+     p=r['players'][uid];resource=selected_resource(p)
+     if resource['action'] in ['map','sprint']:
+      if r['phase']!='playing' or p['caught'] or p.get('review'):raise ValueError('Resource unavailable now.')
+      return self.send(200,{'action':resource['action']})
+     action(r,p,resource['action'])
     elif path=='/api/action':action(r,r['players'][uid],data.get('action'))
     else:raise ValueError('Unknown action')
     if r:r['updated']=time.time()
